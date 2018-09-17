@@ -19,14 +19,14 @@ def automl_leaderboard_sort_metric():
         automl_seed = random.randint(0,sys.maxsize)
     print("Random Seed for pyunit_automl_leaderboard.py = " + str(automl_seed))
 
-    all_algos = ["GLM", "DeepLearning", "GBM", "DRF", "StackedEnsemble"]
+    all_algos = ["GLM", "DeepLearning", "GBM", "DRF", "XGBoost", "StackedEnsemble"]
 
     # Binomial
     print("Check leaderboard for Binomial")
     fr1 = h2o.import_file(path=pyunit_utils.locate("smalldata/logreg/prostate.csv"))
     fr1["CAPSULE"] = fr1["CAPSULE"].asfactor()
     exclude_algos = ["GLM", "DeepLearning", "DRF"]
-    aml = H2OAutoML(max_models=2, project_name="py_lb_test_aml1", exclude_algos=exclude_algos, seed=automl_seed, sort_metric="logloss")
+    aml = H2OAutoML(max_models=10, project_name="py_lb_test_aml1", exclude_algos=exclude_algos, seed=automl_seed, sort_metric="logloss")
     aml.train(y="CAPSULE", training_frame=fr1)
     lb = aml.leaderboard
     print("AutoML leaderboard")
@@ -42,12 +42,11 @@ def automl_leaderboard_sort_metric():
 
 
     # Regression
-    # TO DO: Change this dataset
     print("Check leaderboard for Regression")
-    fr2 = h2o.import_file(path=pyunit_utils.locate("smalldata/covtype/covtype.20k.data"))
+    fr2 = h2o.import_file(path=pyunit_utils.locate("smalldata/extdata/australia.csv"))
     exclude_algos = ["GBM", "DeepLearning"]
-    aml = H2OAutoML(max_models=10, project_name="py_lb_test_aml2", exclude_algos=exclude_algos, seed=automl_seed,sort_metric="RMSE")
-    aml.train(y=4, training_frame=fr2)
+    aml = H2OAutoML(max_models=10, project_name="py_lb_test_aml2", exclude_algos=exclude_algos, seed=automl_seed, sort_metric="RMSE")
+    aml.train(y="runoffnew", training_frame=fr2)
     lb = aml.leaderboard
     print("AutoML leaderboard")
     print(lb)
@@ -64,8 +63,8 @@ def automl_leaderboard_sort_metric():
     # Multinomial
     print("Check leaderboard for Multinomial")
     fr3 = h2o.import_file(path=pyunit_utils.locate("smalldata/iris/iris_wheader.csv"))
-    exclude_algos = ["GBM"]
-    aml = H2OAutoML(max_models=6, project_name="py_lb_test_aml3", exclude_algos=exclude_algos, seed=automl_seed, sort_metric="logloss")
+    exclude_algos = ["DeepLearning"]
+    aml = H2OAutoML(max_models=10, project_name="py_lb_test_aml3", exclude_algos=exclude_algos, seed=automl_seed, sort_metric="logloss")
     aml.train(y=4, training_frame=fr3)
     lb = aml.leaderboard
     print("AutoML leaderboard")
