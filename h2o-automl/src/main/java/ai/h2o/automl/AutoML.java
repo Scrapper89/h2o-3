@@ -43,7 +43,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public final class AutoML extends Lockable<AutoML> implements TimedH2ORunnable {
 
-  private static class WorkAllocations extends Iced<WorkAllocations> {
+  static class WorkAllocations extends Iced<WorkAllocations> {
 
     private static class Work extends Iced<Work> {
       private Algo algo;
@@ -136,7 +136,6 @@ public final class AutoML extends Lockable<AutoML> implements TimedH2ORunnable {
     DeepLearning,
     StackedEnsemble,
     XGBoost,
-    LightGBM { @Override String urlName() { return XGBoost.urlName(); } }
     ;
 
     String urlName() {
@@ -203,7 +202,7 @@ public final class AutoML extends Lockable<AutoML> implements TimedH2ORunnable {
   private String[] originalTrainingFrameNames;
   private long[] originalTrainingFrameChecksums;
 
-  private WorkAllocations workAllocations = new WorkAllocations();
+  private WorkAllocations workAllocations;
 
   private Algo[] skipAlgosList = new Algo[]{};
 
@@ -252,22 +251,19 @@ public final class AutoML extends Lockable<AutoML> implements TimedH2ORunnable {
     // TODO: does this need to be updated?  I think its okay to pass a null leaderboardFrame
     leaderboard = Leaderboard.getOrMakeLeaderboard(projectName(), userFeedback, this.leaderboardFrame, this.sort_metric);
 
-    planWork();
-
     this.jobs = new ArrayList<>();
     this.tempFrames = new ArrayList<>();
   }
 
 
-  private void planWork() {
+  WorkAllocations planWork() {
+    workAllocations = new WorkAllocations();
     workAllocations.allocate(Algo.DeepLearning, 1, JobType.ModelBuild, 10)
             .allocate(Algo.DeepLearning, 3, JobType.HyperparamSearch, 20)
             .allocate(Algo.DRF, 2, JobType.ModelBuild, 10)
             .allocate(Algo.GBM, 5, JobType.ModelBuild, 10)
             .allocate(Algo.GBM, 1, JobType.HyperparamSearch, 60)
             .allocate(Algo.GLM, 1, JobType.HyperparamSearch, 20)
-//            .allocate(Algo.LightGBM, 3, JobType.ModelBuild, 10)
-//            .allocate(Algo.LightGBM, 1, JobType.HyperparamSearch, 100)
             .allocate(Algo.XGBoost, 3, JobType.ModelBuild, 10)
             .allocate(Algo.XGBoost, 1, JobType.HyperparamSearch, 100)
             .allocate(Algo.StackedEnsemble, 2, JobType.ModelBuild, 15)
@@ -280,7 +276,7 @@ public final class AutoML extends Lockable<AutoML> implements TimedH2ORunnable {
     }
     if (!ExtensionManager.getInstance().isCoreExtensionEnabled("XGBoost")) {
       userFeedback.warn(Stage.ModelTraining, "AutoML: XGBoost extension is not available; skipping default XGBoost");
-      skipAlgosList = ArrayUtils.append(skipAlgosList, Algo.XGBoost, Algo.LightGBM);
+      skipAlgosList = ArrayUtils.append(skipAlgosList, Algo.XGBoost);
     }
 
     // This is useful during debugging.
@@ -293,6 +289,7 @@ public final class AutoML extends Lockable<AutoML> implements TimedH2ORunnable {
       workAllocations.remove(skippedAlgo);
     }
 
+    return workAllocations;
   }
 
   /**
@@ -811,12 +808,6 @@ public final class AutoML extends Lockable<AutoML> implements TimedH2ORunnable {
 
   private boolean exceededSearchLimits(WorkAllocations.Work work, String algo_desc, boolean ignoreLimits) {
     String fullName = algo_desc == null ? work.algo.toString() : work.algo+" ("+algo_desc+")";
-
-    if (ArrayUtils.contains(skipAlgosList, work.algo)) {
-      userFeedback.info(Stage.ModelTraining,"AutoML: skipping Algo "+fullName+" in "+work.type);
-      return true;
-    }
-
     if (!ignoreLimits && timingOut()) {
       userFeedback.info(Stage.ModelTraining, "AutoML: out of time; skipping "+fullName+" in "+work.type);
       return true;
@@ -830,7 +821,7 @@ public final class AutoML extends Lockable<AutoML> implements TimedH2ORunnable {
   }
 
   void defaultXGBoosts(boolean emulateLightGBM) {
-    Algo algo = emulateLightGBM ? Algo.LightGBM : Algo.XGBoost;
+    Algo algo = Algo.XGBoost;
     WorkAllocations.Work work = workAllocations.getAllocation(algo, JobType.ModelBuild);
     if (work == null) return;
 
@@ -915,7 +906,7 @@ public final class AutoML extends Lockable<AutoML> implements TimedH2ORunnable {
 
 
   void defaultSearchXGBoost(Key<Grid> gridKey, boolean emulateLightGBM) {
-    Algo algo = emulateLightGBM ? Algo.LightGBM : Algo.XGBoost;
+    Algo algo = Algo.XGBoost;
     WorkAllocations.Work work = workAllocations.getAllocation(algo, JobType.HyperparamSearch);
     if (work == null) return;
 
@@ -1446,6 +1437,7 @@ public final class AutoML extends Lockable<AutoML> implements TimedH2ORunnable {
   public static void startAutoML(AutoML aml) {
     // Currently AutoML can only run one job at a time
     if (aml.job == null || !aml.job.isRunning()) {
+      aml.planWork();
       Job job = new /* Timed */ H2OJob(aml, aml._key, aml.timeRemainingMs()).start();
       aml.job = job;
       job._work = aml.workAllocations.remainingWork();
